@@ -44,7 +44,7 @@ def get_commits_for_pr(github_token, repo_owner, repo_name, pull_request_number,
             exit(1)
     return all_commits
 
-def get_secret_scanning_alerts_for_repo(github_token, repo_owner, repo_name, http_proxy_url, https_proxy_url, verify_ssl, skip_closed_alerts):
+def get_secret_scanning_alerts_for_repo(github_token, repo_owner, repo_name, http_proxy_url, https_proxy_url, verify_ssl, skip_closed_alerts, secret_type=None):
     # API documentation: https://docs.github.com/en/enterprise-cloud@latest/rest/secret-scanning/secret-scanning?apiVersion=2022-11-28#list-secret-scanning-alerts-for-a-repository
     all_alerts = []
     per_page = 100
@@ -54,6 +54,9 @@ def get_secret_scanning_alerts_for_repo(github_token, repo_owner, repo_name, htt
             url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/secret-scanning/alerts?per_page={per_page}&page={page}"
             if skip_closed_alerts:
                 url += "&state=open"
+            if secret_type is not None:
+                comma_separated_request_type = ','.join(secret_type)
+                url += f"&secret_type={comma_separated_request_type}"
             headers = {
                 "Authorization": f"Bearer {github_token}",
                 "Accept": "application/vnd.github+json",
@@ -337,6 +340,20 @@ def main(github_token, fail_on_alert, fail_on_alert_exclude_closed, disable_pr_c
     # Get the secret scanning alerts for the repo:
     logging.debug("Getting the secret scanning alerts for the repo.")
     alerts = get_secret_scanning_alerts_for_repo(github_token, repo_owner, repo_name, http_proxy_url, https_proxy_url, verify_ssl, skip_closed_alerts)
+    alerts += get_secret_scanning_alerts_for_repo(github_token, repo_owner, repo_name, http_proxy_url, https_proxy_url,
+                                                  verify_ssl,
+                                                  skip_closed_alerts,
+                                                  secret_type=[
+                                                      'password',
+                                                      'http_basic_authentication_header',
+                                                      'http_bearer_authentication_header',
+                                                      'mongodb_connection_string',
+                                                      'mysql_connection_string',
+                                                      'openssh_private_key',
+                                                      'pgp_private_key',
+                                                      'postgres_connection_string',
+                                                      'rsa_private_key',
+                                                  ])
     logging.debug(f"Found {len(alerts)} alerts.")
 
     # For each alert check if the alert's commit is in the list of PR commits
